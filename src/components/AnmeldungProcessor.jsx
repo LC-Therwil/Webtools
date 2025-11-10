@@ -270,10 +270,10 @@ export default function CSVProcessor() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 flex items-start justify-center">
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-lg p-6">
+    <div className="min-h-screen bg-slate-50 p-4 flex items-start justify-center">
+      <div className="w-full max-w-7xl bg-white rounded-2xl shadow-lg p-6">
         <h1 className="text-2xl font-semibold mb-2">LCT Clubdesk Anmeldungsdatei Umwandlung</h1>
-        <p className="text-sm text-slate-500 mb-4">1. Anmeldungen aus Clubdesk exportieren. <br/>2. CSV Datei hier hochladen <br/>3. Verarbeitete CSV Datei hier herunterladen. <br/>4. Neue CSV Datei in Cludesk importieren.</p>
+        <p className="text-sm text-slate-500 mb-4">1. Anmeldungen aus Clubdesk exportieren. <br/>2. CSV Datei hier hochladen <br/>3. Verarbeitete CSV Datei hier herunterladen. <br/>4. Verarbeitete CSV Datei in Clubdesk importieren.</p>
 
         <div
           onDrop={onDrop}
@@ -298,7 +298,7 @@ export default function CSVProcessor() {
             className="ml-auto bg-emerald-600 text-white px-4 py-2 rounded shadow hover:opacity-90"
             disabled={!processedData}
           >
-            Verarbeitete CSV herunterladen
+            Verarbeitete CSV-Datei herunterladen
           </button>
         </div>
 
@@ -325,11 +325,11 @@ export default function CSVProcessor() {
             <div className="mb-6">
               <h2 className="text-lg font-semibold mb-2 text-slate-700">Originaldaten (Erste 10 Zeilen)</h2>
               <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full table-auto border-collapse">
+                <table className="w-full table-fixed border-collapse min-w-max">
                   <thead>
                     <tr>
                       {originalHeaders.map((h) => (
-                        <th key={h} className="border px-2 py-1 text-left text-xs bg-slate-100">{h}</th>
+                        <th key={h} className="border px-3 py-2 text-left text-xs bg-slate-100 min-w-[120px]">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -337,7 +337,7 @@ export default function CSVProcessor() {
                     {rawData.slice(0, 10).map((row, i) => (
                       <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
                         {originalHeaders.map((h) => (
-                          <td key={h} className="border px-2 py-1 text-xs">{String(row?.[h] ?? "")}</td>
+                          <td key={h} className="border px-3 py-2 text-xs min-w-[120px] break-words">{String(row?.[h] ?? "")}</td>
                         ))}
                       </tr>
                     ))}
@@ -350,11 +350,11 @@ export default function CSVProcessor() {
               <div className="mb-6">
                 <h2 className="text-lg font-semibold mb-2 text-slate-700">Verarbeitete Daten (Erste 10 Zeilen)</h2>
                 <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full table-auto border-collapse">
+                  <table className="w-full table-fixed border-collapse min-w-max">
                     <thead>
                       <tr>
                         {headers.map((h) => (
-                          <th key={h} className="border px-2 py-1 text-left text-xs bg-emerald-100">{h}</th>
+                          <th key={h} className="border px-3 py-2 text-left text-xs bg-emerald-100 min-w-[120px]">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -362,7 +362,7 @@ export default function CSVProcessor() {
                       {processedData.slice(0, 10).map((row, i) => (
                         <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-emerald-50"}>
                           {headers.map((h) => (
-                            <td key={h} className="border px-2 py-1 text-xs">{String(row?.[h] ?? "")}</td>
+                            <td key={h} className="border px-3 py-2 text-xs min-w-[120px] break-words">{String(row?.[h] ?? "")}</td>
                           ))}
                         </tr>
                       ))}
