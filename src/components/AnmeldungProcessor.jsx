@@ -64,9 +64,19 @@ export default function CSVProcessor() {
           setWarnings([]); // Clear previous warnings
 
           // Automatically process the data
-          processData(data, cols);
+          const isSchnuppertraining = cols.some((col) =>
+            typeof col === "string" && col.toLowerCase().includes("schnuppertraining")
+          );
 
-          setStatus(`${data.length} Zeilen und ${cols.length} Spalten analysiert und verarbeitet (Trennzeichen: ${results.meta.delimiter})`);
+          if (isSchnuppertraining) {
+            processDataSchnuppertraining(data, cols);
+          } else {
+            processDataAnmeldung(data, cols);
+          }
+
+          const fileType = isSchnuppertraining ? "Schnuppertraining" : "Anmeldung";
+
+          setStatus(`${data.length} Zeilen und ${cols.length} Spalten analysiert und verarbeitet (Dateiart: ${fileType}, Trennzeichen: ${results.meta.delimiter})`);
         },
         error: (err) => {
           setStatus("Fehler beim Analysieren der CSV: " + err.message);
@@ -122,7 +132,62 @@ export default function CSVProcessor() {
     return formatted;
   }
 
-  function processData(data, cols) {
+  function computeAnrede(geschlecht) {
+    if (!geschlecht || typeof geschlecht !== "string") 
+      throw new Error("Geschlecht fehlt - Anrede leer gelassen");
+
+      const geschlechtLower = geschlecht.toLowerCase().trim();
+      if (geschlechtLower === "weiblich") {
+        return "Frau";
+      } else if (geschlechtLower === "männlich") {
+        return "Herr";
+      } 
+      
+      throw new Error(`Unbekanntes Geschlecht "${geschlecht}" - Anrede leer gelassen`);
+  }
+
+  function computeEintritt(erhaltenAm) {
+    if (!erhaltenAm || typeof erhaltenAm !== "string") {
+      throw new Error(`"Erhalten am" Datum fehlt - Eintritt leer gelassen`);
+    }
+
+    // Extract date from format "dd.mm.YYYY hour:min:sec"
+    const dateMatch = erhaltenAm.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+    if (dateMatch) {
+      const [, day, month, year] = dateMatch;
+      return `${day}.${month}.${year}`;
+    }
+
+    throw new Error(`Ungültiges Datumsformat in "Erhalten am": "${erhaltenAm}"`);
+  }
+
+  function computeStatus(mitgliedschaft) {
+    if (!mitgliedschaft || typeof mitgliedschaft !== "string") {
+      throw new Error(`Mitgliedschaft fehlt`);
+    }
+
+    if (mitgliedschaft.startsWith("Kindermitglied")) {
+      return "Kindermitglied";
+    } else if (mitgliedschaft.startsWith("Jugendmitglied")) {
+      return "Jugendmitglied";
+    } else if (mitgliedschaft.startsWith("Nachwuchsmitglied")) {
+      return "Nachwuchsmitglied";
+    } else if (mitgliedschaft.startsWith("Aktivmitglied (Fitnessgruppe)")) {
+      return "Aktivmitglied (Fitness)";
+    } else if (mitgliedschaft.startsWith("Aktivmitglied")) {
+      return "Aktivmitglied";
+    } else if (mitgliedschaft.startsWith("Passivmitglied")) {
+      return "Passivmitglied";
+    } else if (mitgliedschaft.startsWith("Wettkampffunktionär:in")) {
+      return "Staff LC Therwil";
+    } else if (mitgliedschaft.startsWith("Trainer:in")) {
+      return "Staff LC Therwil";
+    } 
+    
+    throw new Error(`Unbekannte Mitgliedschaft "${mitgliedschaft}"`);
+  }
+
+  function processDataAnmeldung(data, cols) {
     const processingWarnings = [];
 
     const processed = data.map((row, index) => {
@@ -143,68 +208,30 @@ export default function CSVProcessor() {
       }
 
       // Create "Anrede" column based on "Geschlecht"
-      const geschlecht = newRow["Geschlecht"];
-      if (geschlecht && typeof geschlecht === "string") {
-        const geschlechtLower = geschlecht.toLowerCase().trim();
-        if (geschlechtLower === "weiblich") {
-          newRow["Anrede"] = "Frau";
-        } else if (geschlechtLower === "männlich") {
-          newRow["Anrede"] = "Herr";
-        } else {
-          newRow["Anrede"] = ""; // Empty for other values
-          processingWarnings.push(`Zeile ${index + 1}: Unbekanntes Geschlecht "${geschlecht}" - Anrede leer gelassen`);
-        }
-      } else {
+      try {
+        newRow["Anrede"] = computeAnrede(newRow["Geschlecht"]);
+      } catch (err) {
         newRow["Anrede"] = "";
-        processingWarnings.push(`Zeile ${index + 1}: Geschlecht fehlt - Anrede leer gelassen`);
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
       // Create "Briefanrede" column with personalized greeting
       newRow["Briefanrede"] = "Liebe(r) ...";
 
       // Create "Eintritt" column based on "Erhalten am" date
-      const erhaltenAm = newRow["Erhalten am"];
-      if (erhaltenAm && typeof erhaltenAm === "string") {
-        // Extract date from format "dd.mm.YYYY hour:min:sec"
-        const dateMatch = erhaltenAm.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-        if (dateMatch) {
-          const [, day, month, year] = dateMatch;
-          newRow["Eintritt"] = `${day}.${month}.${year}`;
-        } else {
-          newRow["Eintritt"] = "";
-          processingWarnings.push(`Zeile ${index + 1}: Ungültiges Datumsformat in "Erhalten am": "${erhaltenAm}"`);
-        }
-      } else {
+      try {
+        newRow["Eintritt"] = computeEintritt(newRow["Erhalten am"]);
+      } catch (err) {
         newRow["Eintritt"] = "";
-        processingWarnings.push(`Zeile ${index + 1}: "Erhalten am" Datum fehlt - Eintritt leer gelassen`);
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
       // Create "Status" column based on "Mitgliedschaft"
-      const mitgliedschaft = newRow["Mitgliedschaft"];
-      if (mitgliedschaft && typeof mitgliedschaft === "string") {
-        if (mitgliedschaft.startsWith("Kindermitglied")) {
-          newRow["Status"] = "Kindermitglied";
-        } else if (mitgliedschaft.startsWith("Jugendmitglied")) {
-          newRow["Status"] = "Jugendmitglied";
-        } else if (mitgliedschaft.startsWith("Nachwuchsmitglied")) {
-          newRow["Status"] = "Nachwuchsmitglied";
-        } else if (mitgliedschaft.startsWith("Aktivmitglied (Fitnessgruppe)")) {
-          newRow["Status"] = "Aktivmitglied (Fitness)";
-        } else if (mitgliedschaft.startsWith("Aktivmitglied")) {
-          newRow["Status"] = "Aktivmitglied";
-        } else if (mitgliedschaft.startsWith("Passivmitglied")) {
-          newRow["Status"] = "Passivmitglied";
-        } else if (mitgliedschaft.startsWith("Wettkampffunktionär:in")) {
-          newRow["Status"] = "Staff LC Therwil";
-        } else if (mitgliedschaft.startsWith("Trainer:in")) {
-          newRow["Status"] = "Staff LC Therwil";
-        } else {
-          processingWarnings.push(`Zeile ${index + 1}: Unbekannte Mitgliedschaft "${mitgliedschaft}" - Status leer gelassen`);
-          newRow["Status"] = "";
-        }
-      } else {
-        processingWarnings.push(`Zeile ${index + 1}: Mitgliedschaft fehlt - Status auf "Kein Mitglied" gesetzt`);
-        newRow["Status"] = "Kein Mitglied";
+      try {
+        newRow["Status"] = computeStatus(newRow["Mitgliedschaft"]);
+      } catch (err) {
+        newRow["Status"] = "";
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
       newRow["Notfallnummer"] = doParsePhoneNumber(newRow["Notfallnummer"]);
@@ -244,6 +271,63 @@ export default function CSVProcessor() {
     // Update headers to include new columns with Anrede at first position
     // const newHeaders = ["Anrede", "Briefanrede", "Eintritt", "Status", ...cols, "ProcessedAt"];
     const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Eintritt", "Status", "Notfallnummer", "AHV-Nummer", "Email Vater", "Telefon Privat", "Telefon Mobil", "Telefon Geschäft", "E-Mail", "E-Mail Alternativ", "Geburtsdatum", "Nationalität"];
+    setHeaders(newHeaders);
+    setProcessedData(processed);
+    setWarnings(processingWarnings);
+  }
+
+  function processDataSchnuppertraining(data, cols) {
+    const processingWarnings = [];
+
+    const processed = data.map((row, index) => {
+      const newRow = {};
+      for (const key of cols) {
+        let v = row[key];
+        if (v === null || v === undefined) {
+          newRow[key] = v;
+          continue;
+        }
+        // Trim strings
+        if (typeof v === "string") v = v.trim();
+        
+        // Column mapping - rename columns
+        const mappedKey = key === "AHV-Nummer (756.xxxx.xxxx.xx)" ? "AHV-Nummer" :
+                          key === "E-Mail Erziehungsberechtigte" ? "E-Mail" :
+                          key === "Vorname Athlet:in" ? "Vorname" :
+                          key === "Nachname Athlet:in" ? "Nachname" :
+                          key === "Geschlecht Athlet:in" ? "Geschlecht" :
+                          key === "Geburtsdatum Athlet:in" ? "Geburtsdatum" :
+                          key;
+        newRow[mappedKey] = v;
+      }
+
+      // Create "Anrede" column based on "Geschlecht"
+      try {
+        newRow["Anrede"] = computeAnrede(newRow["Geschlecht"]);
+      } catch (err) {
+        newRow["Anrede"] = "";
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
+      }
+
+      // Create "Briefanrede" column with personalized greeting
+      newRow["Briefanrede"] = "Liebe(r) ...";
+
+      newRow["Notfallnummer"] = doParsePhoneNumber(newRow["Notfallnummer"]);
+      newRow["Telefon Privat"] = newRow["Notfallnummer"]
+
+      try {
+        newRow["AHV-Nummer"] = parseAHV(newRow["AHV-Nummer"]);
+      } catch (err) {
+        processingWarnings.push(`Zeile ${index + 1}: Ungültige AHV-Nummer "${newRow["AHV-Nummer"]}"`);
+      }
+
+      newRow["ProcessedAt"] = new Date().toISOString();
+      return newRow;
+    });
+
+    // Update headers to include new columns with Anrede at first position
+    // const newHeaders = ["Anrede", "Briefanrede", "Eintritt", "Status", ...cols, "ProcessedAt"];
+    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Notfallnummer", "AHV-Nummer", "Telefon Privat", "E-Mail", "Geburtsdatum"];
     setHeaders(newHeaders);
     setProcessedData(processed);
     setWarnings(processingWarnings);
@@ -373,6 +457,43 @@ export default function CSVProcessor() {
             )}
           </>
         )}
+
+        <div className="mt-8 p-6 bg-slate-100 rounded-lg">
+          <h3 className="text-lg font-semibold mb-4 text-slate-800 flex items-center">
+            <span className="mr-2">ℹ️</span>
+            Verarbeitungsschritte
+          </h3>
+          <div className="text-sm text-slate-700 space-y-3">
+            <p className="font-medium">Die folgenden Transformationen werden automatisch auf die CSV-Daten angewendet:</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h4 className="font-semibold text-slate-800 mb-2">Neue Spalten erstellen:</h4>
+                <ul className="space-y-1 text-xs">
+                  <li>• <strong>Anrede:</strong> "Frau" oder "Herr" basierend auf Geschlecht</li>
+                  <li>• <strong>Eintritt:</strong> Datum aus "Erhalten am" extrahiert (dd.mm.yyyy)</li>
+                  <li>• <strong>Status:</strong> Mitgliedschaftstyp aus "Mitgliedschaft" abgeleitet</li>
+                </ul>
+              </div>
+              
+              <div>
+                <h4 className="font-semibold text-slate-800 mb-2">Daten bereinigen:</h4>
+                <ul className="space-y-1 text-xs">
+                  <li>• <strong>Telefonnummern:</strong> Formatierung nach CH-Standard</li>
+                  <li>• <strong>E-Mail Zuordnung:</strong> Priorität Athlet→Mutter→Vater</li>
+                  <li>• <strong>AHV-Nummer:</strong> Validierung und Formatierung</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-xs text-blue-800">
+                <strong>Hinweis:</strong> Die Verarbeitung erfolgt vollständig im Browser. Keine Daten werden an externe Server gesendet. 
+                Warnungen werden angezeigt, wenn Daten nicht den erwarteten Formaten entsprechen.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
