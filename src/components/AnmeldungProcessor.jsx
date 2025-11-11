@@ -321,13 +321,17 @@ export default function CSVProcessor() {
         processingWarnings.push(`Zeile ${index + 1}: Ungültige AHV-Nummer "${newRow["AHV-Nummer"]}"`);
       }
 
+      const currentDate = new Date();
+      const currentDateString = `${String(currentDate.getDate()).padStart(2, '0')}.${String(currentDate.getMonth() + 1).padStart(2, '0')}.${currentDate.getFullYear()}`;
+      newRow["Bemerkungen"] = `Schnuppert ab ${currentDateString}`;
+
       newRow["ProcessedAt"] = new Date().toISOString();
       return newRow;
     });
 
     // Update headers to include new columns with Anrede at first position
     // const newHeaders = ["Anrede", "Briefanrede", "Eintritt", "Status", ...cols, "ProcessedAt"];
-    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Notfallnummer", "AHV-Nummer", "Telefon Privat", "E-Mail", "Geburtsdatum"];
+    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Notfallnummer", "AHV-Nummer", "Telefon Privat", "E-Mail", "Geburtsdatum", "Bemerkungen"];
     setHeaders(newHeaders);
     setProcessedData(processed);
     setWarnings(processingWarnings);
@@ -356,8 +360,14 @@ export default function CSVProcessor() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 flex items-start justify-center">
       <div className="w-full max-w-7xl bg-white rounded-2xl shadow-lg p-6">
-        <h1 className="text-2xl font-semibold mb-2">LCT Clubdesk Anmeldungsdatei Umwandlung</h1>
-        <p className="text-sm text-slate-500 mb-4">1. Anmeldungen aus Clubdesk exportieren. <br/>2. CSV Datei hier hochladen <br/>3. Verarbeitete CSV Datei hier herunterladen. <br/>4. Verarbeitete CSV Datei in Clubdesk importieren.</p>
+        <h1 className="text-2xl font-semibold mb-2">LCT Clubdesk Anmeldungs- & Schnuppertrainingsdatei Umwandlung</h1>
+
+        <ol className="text-sm text-slate-500 mb-4 list-decimal list-inside space-y-1">
+          <li>Anmeldungen aus Clubdesk exportieren</li>
+          <li>CSV Datei hier hochladen</li>
+          <li>Verarbeitete CSV Datei hier herunterladen</li>
+          <li>Verarbeitete CSV Datei in Clubdesk importieren</li>
+        </ol>
 
         <div
           onDrop={onDrop}
@@ -471,8 +481,9 @@ export default function CSVProcessor() {
                 <h4 className="font-semibold text-slate-800 mb-2">Neue Spalten erstellen:</h4>
                 <ul className="space-y-1 text-xs">
                   <li>• <strong>Anrede:</strong> "Frau" oder "Herr" basierend auf Geschlecht</li>
-                  <li>• <strong>Eintritt:</strong> Datum aus "Erhalten am" extrahiert (dd.mm.yyyy)</li>
-                  <li>• <strong>Status:</strong> Mitgliedschaftstyp aus "Mitgliedschaft" abgeleitet</li>
+                  <li>• <strong>Eintritt:</strong> Datum aus "Erhalten am" extrahiert (dd.mm.yyyy) (nur bei Anmeldungen)</li>
+                  <li>• <strong>Status:</strong> Mitgliedschaftstyp aus "Mitgliedschaft" abgeleitet (nur bei Anmeldungen)</li>
+                  <li>• <strong>Bemerkungen:</strong> Aktuelles Datum als Schnupperstart (nur bei Schnuppertraining)</li>
                 </ul>
               </div>
               
