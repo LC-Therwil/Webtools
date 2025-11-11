@@ -264,13 +264,15 @@ export default function CSVProcessor() {
         processingWarnings.push(`Zeile ${index + 1}: Ungültige AHV-Nummer "${newRow["AHV-Nummer"]}"`);
       }
 
+      newRow["Bemerkungen"] = "";
+
       newRow["ProcessedAt"] = new Date().toISOString();
       return newRow;
     });
 
     // Update headers to include new columns with Anrede at first position
     // const newHeaders = ["Anrede", "Briefanrede", "Eintritt", "Status", ...cols, "ProcessedAt"];
-    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Eintritt", "Status", "Notfallnummer", "AHV-Nummer", "Email Vater", "Telefon Privat", "Telefon Mobil", "Telefon Geschäft", "E-Mail", "E-Mail Alternativ", "Geburtsdatum", "Nationalität"];
+    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Eintritt", "Status", "Notfallnummer", "AHV-Nummer", "Email Vater", "Telefon Privat", "Telefon Mobil", "Telefon Geschäft", "E-Mail", "E-Mail Alternativ", "Geburtsdatum", "Nationalität", "Bemerkungen"];
     setHeaders(newHeaders);
     setProcessedData(processed);
     setWarnings(processingWarnings);
