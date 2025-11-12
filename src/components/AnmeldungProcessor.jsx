@@ -345,9 +345,7 @@ export default function CSVProcessor() {
       columns: headers,
       delimiter: csvDelimiter // Use the same delimiter as the input file
     });
-    // Add UTF-8 BOM to ensure proper encoding in Excel and other applications
-    const csvWithBOM = '\uFEFF' + csv;
-    const blob = new Blob([csvWithBOM], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
