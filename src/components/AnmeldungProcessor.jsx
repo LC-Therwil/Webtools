@@ -234,6 +234,8 @@ export default function CSVProcessor() {
         processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
+      newRow["PLZ"] = newRow["PLZ"].replace(/[\s']+/g, '');
+
       newRow["Notfallnummer"] = doParsePhoneNumber(newRow["Notfallnummer"]);
       newRow["Telefon Privat"] = doParsePhoneNumber(newRow["Mobiltelefon Athlet:in"]);
       newRow["Telefon Mobil"] = doParsePhoneNumber(newRow["Mobiltelefon Mutter"]);
@@ -316,6 +318,7 @@ export default function CSVProcessor() {
 
       newRow["Notfallnummer"] = doParsePhoneNumber(newRow["Notfallnummer"]);
       newRow["Telefon Privat"] = newRow["Notfallnummer"]
+      newRow["PLZ"] = newRow["PLZ"].replace(/[\s']+/g, '');
 
       try {
         newRow["AHV-Nummer"] = parseAHV(newRow["AHV-Nummer"]);
