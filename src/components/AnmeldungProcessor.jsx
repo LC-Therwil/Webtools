@@ -7,7 +7,7 @@ import parsePhoneNumber from 'libphonenumber-js'
 // - Upload CSV (drag/drop or file input)
 // - Parses locally in the browser using PapaParse
 // - Basic processing: trim values, optional uppercase a chosen column, add a "ProcessedAt" timestamp
-// - Preview first 10 rows
+// - Preview first 20 rows
 // - Download processed CSV
 
 export default function CSVProcessor() {
@@ -103,19 +103,20 @@ export default function CSVProcessor() {
 
   function doParsePhoneNumber(number) {
     if (!number || typeof number !== "string") return "";
-    let cleaned = number.replace(/[\s']+/g, '');
-
-    const phoneNumber = parsePhoneNumber(cleaned, "CH");
-
-    let cleanedNumber = phoneNumber.country === 'CH' ? phoneNumber.formatNational() : phoneNumber.formatInternational();
-    
-    return cleanedNumber;
+    const cleaned = number.replace(/[\s']+/g, '');
+    try {
+      const phoneNumber = parsePhoneNumber(cleaned, "CH");
+      if (!phoneNumber) return cleaned;
+      return phoneNumber.country === 'CH' ? phoneNumber.formatNational() : phoneNumber.formatInternational();
+    } catch (err) {
+      throw new Error(`Ungültige Telefonnummer: ${number}`);
+    }
   }
 
   function parseAHV(ahv) {
-    if (!ahv || typeof ahv !== "string") return false;
+    if (!ahv || typeof ahv !== "string") throw new Error(`Ungültige AHV-Nummer: ${ahv}`);
     const cleaned = ahv.replace(/[\s.]+/g, '');
-    if (cleaned.length !== 13) return false;
+    if (cleaned.length !== 13) throw new Error(`Ungültige AHV-Nummer: ${ahv}`);
 
     let pruefziffer = parseInt(cleaned.charAt(12), 10);
     let sum = 0;
@@ -125,7 +126,7 @@ export default function CSVProcessor() {
     }
 
     if (((10 - (sum % 10)) % 10) !== pruefziffer) {
-        throw new Error("Ungültige AHV-Nummer");
+        throw new Error(`Ungültige AHV-Nummer: ${ahv}`);
     }
 
     let formatted = cleaned.slice(0, 3) + "." + cleaned.slice(3, 7) + "." + cleaned.slice(7, 11) + "." + cleaned.slice(11);
@@ -190,7 +191,10 @@ export default function CSVProcessor() {
   function processDataAnmeldung(data, cols) {
     const processingWarnings = [];
 
-    const processed = data.map((row, index) => {
+    const processedRows = [];
+
+    for (let index = 0; index < data.length; index++) {
+      const row = data[index];
       const newRow = {};
       for (const key of cols) {
         let v = row[key];
@@ -234,17 +238,43 @@ export default function CSVProcessor() {
         processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
-      newRow["PLZ"] = newRow["PLZ"].replace(/[\s']+/g, '');
+      newRow["PLZ"] = (newRow["PLZ"] || "").replace(/[\s']+/g, '');
 
-      newRow["Notfallnummer"] = doParsePhoneNumber(newRow["Notfallnummer"]);
-      newRow["Telefon Privat"] = doParsePhoneNumber(newRow["Mobiltelefon Athlet:in"]);
-      newRow["Telefon Mobil"] = doParsePhoneNumber(newRow["Mobiltelefon Mutter"]);
-      newRow["Telefon Geschäft"] = doParsePhoneNumber(newRow["Mobiltelefon Vater"]);
+      try {
+        newRow["Notfallnummer"] = doParsePhoneNumber(newRow["Notfallnummer"]);
+      } catch (err) {
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
+      }
+      
+      try {
+        newRow["Telefon Privat"] = doParsePhoneNumber(newRow["Mobiltelefon Athlet:in"]);
+      } catch (err) {
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
+      }
+
+      try {
+        newRow["Telefon Mobil"] = doParsePhoneNumber(newRow["Mobiltelefon Mutter"]);
+      } catch (err) {
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
+      }
+
+      try {
+        newRow["Telefon Geschäft"] = doParsePhoneNumber(newRow["Mobiltelefon Vater"]);
+      } catch (err) {
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
+      }
 
       // Email assignment with priority: Athlet -> Mutter -> Vater
-      const emailAthlet = newRow["Email Athlet:in"];
-      const emailMutter = newRow["Email Mutter"];
+      let emailAthlet = newRow["Email Athlet:in"];
+      let emailMutter = newRow["Email Mutter"];
       const emailVater = newRow["Email Vater"];
+
+      if (emailAthlet === emailMutter || emailAthlet === emailVater) {
+        emailAthlet = "";
+      }
+      if (emailMutter === emailVater) {
+        emailMutter = "";
+      }
       
       newRow["E-Mail"] = emailAthlet || emailMutter || emailVater || "";
       if (!newRow["E-Mail"]) {
@@ -263,20 +293,38 @@ export default function CSVProcessor() {
       try {
         newRow["AHV-Nummer"] = parseAHV(newRow["AHV-Nummer"]);
       } catch (err) {
-        processingWarnings.push(`Zeile ${index + 1}: Ungültige AHV-Nummer "${newRow["AHV-Nummer"]}"`);
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
       newRow["Bemerkungen"] = "";
 
       newRow["ProcessedAt"] = new Date().toISOString();
-      return newRow;
-    });
+
+      // Push the primary processed row
+      processedRows.push(newRow);
+
+      // If all three emails are present, create an additional row for the 3rd email
+      if (emailAthlet && emailMutter && emailVater) {
+        const extraRow = {};
+
+        const copiedHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Geburtsdatum"];
+        copiedHeaders.forEach(header => extraRow[header] = newRow[header]);
+
+        extraRow["Vorname"] = `${extraRow["Vorname"]} 3.`;
+        extraRow["Status"] = "Kein Mitglied";
+
+        // Use the father's email as the primary for the extra row
+        extraRow["E-Mail"] = emailVater;
+        extraRow["ProcessedAt"] = new Date().toISOString();
+
+        processedRows.push(extraRow);
+      }
+    }
 
     // Update headers to include new columns with Anrede at first position
-    // const newHeaders = ["Anrede", "Briefanrede", "Eintritt", "Status", ...cols, "ProcessedAt"];
     const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Eintritt", "Status", "Notfallnummer", "AHV-Nummer", "Email Vater", "Telefon Privat", "Telefon Mobil", "Telefon Geschäft", "E-Mail", "E-Mail Alternativ", "Geburtsdatum", "Nationalität", "Bemerkungen"];
     setHeaders(newHeaders);
-    setProcessedData(processed);
+    setProcessedData(processedRows);
     setWarnings(processingWarnings);
   }
 
@@ -301,7 +349,7 @@ export default function CSVProcessor() {
                           key === "Nachname Athlet:in" ? "Nachname" :
                           key === "Geschlecht Athlet:in" ? "Geschlecht" :
                           key === "Geburtsdatum Athlet:in" ? "Geburtsdatum" :
-                          key;
+                          key.trim();
         newRow[mappedKey] = v;
       }
 
@@ -321,22 +369,34 @@ export default function CSVProcessor() {
       newRow["PLZ"] = newRow["PLZ"].replace(/[\s']+/g, '');
 
       try {
+        newRow["Eintritt"] = computeEintritt(newRow["Erhalten am"]);
+      } catch (err) {
+        newRow["Eintritt"] = "";
+        processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
+      }
+
+      newRow["Status"] = "Warteliste";
+
+      try {
         newRow["AHV-Nummer"] = parseAHV(newRow["AHV-Nummer"]);
       } catch (err) {
         processingWarnings.push(`Zeile ${index + 1}: Ungültige AHV-Nummer "${newRow["AHV-Nummer"]}"`);
       }
 
-      const currentDate = new Date();
-      const currentDateString = `${String(currentDate.getDate()).padStart(2, '0')}.${String(currentDate.getMonth() + 1).padStart(2, '0')}.${currentDate.getFullYear()}`;
-      newRow["Bemerkungen"] = `Schnuppert ab ${currentDateString}`;
+      let earliestStart = newRow["Ab wann könnte mit dem Schnuppertraining begonnen werden?"];
+      if (!earliestStart || earliestStart.trim() === "") {
+        earliestStart = "keine Angabe";
+        // processingWarnings.push(`Zeile ${index + 1}: Kein frühester Schnupperstart angegeben, Standardwert verwendet`);
+      }
+      const bemerkungen = `Kontaktperson: ${newRow["Vorname Kontaktperson"]} ${newRow["Nachname Kontaktperson"]}\nFrühester Schnupperstart: ${earliestStart}`;
+      newRow["Bemerkungen"] = bemerkungen;
 
       newRow["ProcessedAt"] = new Date().toISOString();
       return newRow;
     });
 
     // Update headers to include new columns with Anrede at first position
-    // const newHeaders = ["Anrede", "Briefanrede", "Eintritt", "Status", ...cols, "ProcessedAt"];
-    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Notfallnummer", "AHV-Nummer", "Telefon Privat", "E-Mail", "Geburtsdatum", "Bemerkungen"];
+    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Eintritt", "Status", "Notfallnummer", "AHV-Nummer", "Telefon Privat", "E-Mail", "Geburtsdatum", "Nationalität", "Bemerkungen"];
     setHeaders(newHeaders);
     setProcessedData(processed);
     setWarnings(processingWarnings);
@@ -420,21 +480,43 @@ export default function CSVProcessor() {
         {rawData && (
           <>
             <div className="mb-6">
-              <h2 className="text-lg font-semibold mb-2 text-slate-700">Originaldaten (Erste 10 Zeilen)</h2>
+              <h2 className="text-lg font-semibold mb-2 text-slate-700">Originaldaten</h2>
               <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full table-fixed border-collapse min-w-max">
+                <table className="w-full table-auto border-collapse">
                   <thead>
                     <tr>
+                      <th key="index-header" className="border px-3 py-2 text-left text-xs bg-slate-100 whitespace-nowrap max-w-[6ch]">#</th>
                       {originalHeaders.map((h) => (
-                        <th key={h} className="border px-3 py-2 text-left text-xs bg-slate-100 min-w-[120px]">{h}</th>
+                        <th
+                          key={h}
+                          className={
+                            h === "Bemerkungen" || h === "Fragen oder Anmerkungen"
+                              ? "border px-3 py-2 text-left text-xs bg-slate-100 break-words min-w-[40ch] max-w-[56ch]"
+                              : "border px-3 py-2 text-left text-xs bg-slate-100 whitespace-nowrap max-w-[28ch] truncate"
+                          }
+                          title={h}
+                        >
+                          {h}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {rawData.slice(0, 10).map((row, i) => (
+                    {rawData.map((row, i) => (
                       <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                        <td key={`idx-${i}`} className="border px-3 py-2 text-xs whitespace-nowrap max-w-[6ch]">{i + 1}</td>
                         {originalHeaders.map((h) => (
-                          <td key={h} className="border px-3 py-2 text-xs min-w-[120px] break-words">{String(row?.[h] ?? "")}</td>
+                          <td
+                            key={h}
+                            className={
+                              h === "Bemerkungen" || h === "Fragen oder Anmerkungen"
+                                ? "border px-3 py-2 text-xs break-words whitespace-normal min-w-[40ch] max-w-[56ch]"
+                                : "border px-3 py-2 text-xs whitespace-nowrap max-w-[28ch] truncate"
+                            }
+                            title={String(row?.[h] ?? "")}
+                          >
+                            {String(row?.[h] ?? "")}
+                          </td>
                         ))}
                       </tr>
                     ))}
@@ -445,24 +527,46 @@ export default function CSVProcessor() {
 
             {processedData && (
               <div className="mb-6">
-                <h2 className="text-lg font-semibold mb-2 text-slate-700">Verarbeitete Daten (Erste 10 Zeilen)</h2>
+                <h2 className="text-lg font-semibold mb-2 text-slate-700">Verarbeitete Daten</h2>
                 <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full table-fixed border-collapse min-w-max">
+                  <table className="w-full table-auto border-collapse">
                     <thead>
                       <tr>
+                        <th key="pindex-header" className="border px-3 py-2 text-left text-xs bg-emerald-100 whitespace-nowrap">#</th>
                         {headers.map((h) => (
-                          <th key={h} className="border px-3 py-2 text-left text-xs bg-emerald-100 min-w-[120px]">{h}</th>
+                          <th
+                              key={h}
+                              className={
+                                h === "Bemerkungen" || h === "Fragen oder Anmerkungen"
+                                  ? "border px-3 py-2 text-left text-xs bg-emerald-100 break-words min-w-[40ch] max-w-[56ch]"
+                                  : "border px-3 py-2 text-left text-xs bg-emerald-100 whitespace-nowrap max-w-[28ch] truncate"
+                              }
+                              title={h}
+                            >
+                              {h}
+                            </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {processedData.slice(0, 10).map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-emerald-50"}>
-                          {headers.map((h) => (
-                            <td key={h} className="border px-3 py-2 text-xs min-w-[120px] break-words">{String(row?.[h] ?? "")}</td>
-                          ))}
-                        </tr>
-                      ))}
+                        {processedData.map((row, i) => (
+                          <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-emerald-50"}>
+                            <td key={`pidx-${i}`} className="border px-3 py-2 text-xs">{i + 1}</td>
+                            {headers.map((h) => (
+                                <td
+                                  key={h}
+                                  className={
+                                    (h === "Bemerkungen" || h === "Fragen oder Anmerkungen")
+                                      ? "border px-3 py-2 text-xs break-words whitespace-pre-line min-w-[40ch]"
+                                      : "border px-3 py-2 text-xs whitespace-pre-line"
+                                  }
+                                  title={String(row?.[h] ?? "")}
+                                >
+                                  {String(row?.[h] ?? "")}
+                                </td>
+                              ))}
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
