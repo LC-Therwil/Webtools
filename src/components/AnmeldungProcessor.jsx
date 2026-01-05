@@ -349,6 +349,7 @@ export default function CSVProcessor() {
                           key === "Nachname Athlet:in" ? "Nachname" :
                           key === "Geschlecht Athlet:in" ? "Geschlecht" :
                           key === "Geburtsdatum Athlet:in" ? "Geburtsdatum" :
+                          key === "Ab wann könnte mit dem Schnuppertraining begonnen werden?" ? "Frühester Schnupperstart" :
                           key.trim();
         newRow[mappedKey] = v;
       }
@@ -369,9 +370,9 @@ export default function CSVProcessor() {
       newRow["PLZ"] = newRow["PLZ"].replace(/[\s']+/g, '');
 
       try {
-        newRow["Eintritt"] = computeEintritt(newRow["Erhalten am"]);
+        newRow["Eingangsdatum"] = computeEintritt(newRow["Erhalten am"]);
       } catch (err) {
-        newRow["Eintritt"] = "";
+        newRow["Eingangsdatum"] = "";
         processingWarnings.push(`Zeile ${index + 1}: ${err.message}`);
       }
 
@@ -383,20 +384,36 @@ export default function CSVProcessor() {
         processingWarnings.push(`Zeile ${index + 1}: Ungültige AHV-Nummer "${newRow["AHV-Nummer"]}"`);
       }
 
-      let earliestStart = newRow["Ab wann könnte mit dem Schnuppertraining begonnen werden?"];
-      if (!earliestStart || earliestStart.trim() === "") {
-        earliestStart = "keine Angabe";
-        // processingWarnings.push(`Zeile ${index + 1}: Kein frühester Schnupperstart angegeben, Standardwert verwendet`);
-      }
-      const bemerkungen = `Kontaktperson: ${newRow["Vorname Kontaktperson"]} ${newRow["Nachname Kontaktperson"]}\nFrühester Schnupperstart: ${earliestStart}`;
-      newRow["Bemerkungen"] = bemerkungen;
+      const curYear = new Date().getMonth() >= 10 ? new Date().getFullYear() + 1 : new Date().getFullYear();
+      const yob = parseInt(newRow["Geburtsdatum"].split(".").reverse()[0], 10);
+      const age = curYear - yob;
+      const category = age < 8 ? "U8" :
+                      age < 10 ? "U10" :
+                      age < 12 ? "U12" :
+                      age < 14 ? "U14" :
+                      age < 16 ? "U16" :
+                      age < 18 ? "U18" :
+                      age < 20 ? "U20" :
+                      age < 23 ? "U23" :
+                      "Aktive";
+      newRow["Kategorie"] = category;
 
-      newRow["ProcessedAt"] = new Date().toISOString();
+      // let earliestStart = newRow["Ab wann könnte mit dem Schnuppertraining begonnen werden?"];
+      // if (!earliestStart || earliestStart.trim() === "") {
+      //   earliestStart = "keine Angabe";
+      // }
+      // const bemerkungen = `Kontaktperson: ${newRow["Vorname Kontaktperson"]} ${newRow["Nachname Kontaktperson"]}\nFrühester Schnupperstart: ${earliestStart}`;
+      // newRow["Bemerkungen"] = bemerkungen;
+      newRow["Bemerkungen"] = newRow["Fragen oder Anmerkungen"] || "";
+
+      // newRow["ProcessedAt"] = new Date().toISOString();
       return newRow;
     });
 
+
+
     // Update headers to include new columns with Anrede at first position
-    const newHeaders = ["Anrede", "Briefanrede", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Eintritt", "Status", "Notfallnummer", "AHV-Nummer", "Telefon Privat", "E-Mail", "Geburtsdatum", "Nationalität", "Bemerkungen"];
+    const newHeaders = ["Kategorie", "Eingangsdatum", "Vorname", "Nachname", "Adresse", "PLZ", "Ort", "Land", "Geschlecht", "Notfallnummer", "AHV-Nummer", "E-Mail", "Geburtsdatum", "Nationalität", "Frühester Schnupperstart", "Bemerkungen"];
     setHeaders(newHeaders);
     setProcessedData(processed);
     setWarnings(processingWarnings);
